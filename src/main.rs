@@ -1,3 +1,4 @@
+use std::cmp::min;
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::{self, BufRead};
@@ -7,7 +8,7 @@ fn main() -> Result<(), io::Error> {
     let mut filters = Vec::new();
 
     loop {
-        output_status(&words);
+        output_status(&words, &filters);
         let guess = get_guess(&words)?;
         if let None = guess {
             continue;
@@ -42,6 +43,37 @@ fn get_matching_words(words: &Vec<String>, filters: &Vec<ResultFilter>) -> Vec<S
         .collect()
 }
 
+fn get_best_guess(words: &Vec<String>, filters: &Vec<ResultFilter>) -> Vec<String> {
+    let mut guesses = HashMap::new();
+    let mut filters = filters.to_vec();
+    for guess in words {
+        for word in words {
+            let result = get_result(guess, word);
+            filters.push(ResultFilter {
+                word: guess.clone(),
+                result,
+            });
+            let num_matches = get_matching_words(words, &filters).len();
+            filters.pop();
+            *guesses.entry(word).or_insert(0) += num_matches;
+        }
+    }
+    struct Guess {
+        word: String,
+        score: usize,
+    }
+    let mut guesses = guesses
+        .iter()
+        .map(|(word, score)| Guess {
+            word: (**word).clone(),
+            score: *score,
+        })
+        .collect::<Vec<_>>();
+    guesses.sort_by(|a, b| a.score.cmp(&b.score));
+    guesses.iter().map(|g| g.word.clone()).collect()
+}
+
+#[derive(Clone, Debug)]
 struct ResultFilter {
     word: String,
     result: String,
@@ -88,17 +120,23 @@ impl ResultFilter {
     }
 }
 
-fn output_status(words: &Vec<String>) {
-    println!("There are {} possible words left", words.len());
-    let mut i = 0;
-    for word in words {
-        print!("{}\t", word);
-        i += 1;
-        if i % 12 == 0 {
-            println!();
+fn output_status(words: &Vec<String>, filters: &Vec<ResultFilter>) {
+    println!("\nThere are {} possible words left...", words.len());
+    if words.len() > 1000 {
+        println!("That's too many to brute force good guesses.");
+    } else {
+        println!("Guesses that narrow it down the most are:");
+        let words = get_best_guess(words, filters);
+        let mut i = 0;
+        for word in &words[0..min(words.len(), 48)] {
+            print!("{}\t", word);
+            i += 1;
+            if i % 12 == 0 {
+                println!();
+            }
         }
     }
-    println!("... go guess one!\n");
+    println!("\n... go guess one!\n");
 }
 
 fn get_guess(words: &Vec<String>) -> Result<Option<(String, String)>, io::Error> {
