@@ -8,10 +8,9 @@ use std::io::{self, BufRead};
 
 fn main() -> Result<(), io::Error> {
     let mut words = get_words()?;
-    let mut filters = Vec::new();
 
     loop {
-        output_status(&words, &filters);
+        output_status(&words);
         let guess = get_guess(&words)?;
         if let None = guess {
             continue;
@@ -20,8 +19,8 @@ fn main() -> Result<(), io::Error> {
         if result == "ggggg" {
             println!("You won!");
         }
-        filters.push(ResultFilter::new_owned(word, result));
-        words = get_matching_words(&words, &filters)
+        let filter = ResultFilter::new_owned(word, result);
+        words = get_matching_words(&words, &filter)
             .into_iter()
             .cloned()
             .collect();
@@ -41,22 +40,17 @@ fn main() -> Result<(), io::Error> {
     Ok(())
 }
 
-fn get_matching_words<'a>(words: &'a Vec<String>, filters: &Vec<ResultFilter>) -> Vec<&'a String> {
-    words
-        .iter()
-        .filter(|w| filters.iter().all(|f| f.matches(w)))
-        .collect()
+fn get_matching_words<'a>(words: &'a Vec<String>, filter: &ResultFilter) -> Vec<&'a String> {
+    words.iter().filter(|w| filter.matches(w)).collect()
 }
 
-fn get_best_guess<'a>(words: &'a Vec<String>, filters: &Vec<ResultFilter>) -> Vec<&'a String> {
+fn get_best_guess<'a>(words: &'a Vec<String>) -> Vec<&'a String> {
     let mut guesses = HashMap::new();
-    let mut filters = filters.to_vec();
     for guess in words {
         for word in words {
             let result = get_result(guess, word);
-            filters.push(ResultFilter::new_borrowed(guess, result));
-            let num_matches = get_matching_words(words, &filters).len();
-            filters.pop();
+            let filter = ResultFilter::new_borrowed(guess, result);
+            let num_matches = get_matching_words(words, &filter).len();
             *guesses.entry(word).or_insert(0) += num_matches;
         }
     }
@@ -146,13 +140,13 @@ impl<'a> ResultFilter<'a> {
     }
 }
 
-fn output_status(words: &Vec<String>, filters: &Vec<ResultFilter>) {
+fn output_status(words: &Vec<String>) {
     println!("\nThere are {} possible words left...", words.len());
     if words.len() > 1000 {
         println!("That's too many to brute force good guesses.");
     } else {
         println!("Guesses that narrow it down the most are:");
-        let words = get_best_guess(words, filters);
+        let words = get_best_guess(words);
         let mut i = 0;
         for word in &words[0..min(words.len(), 48)] {
             print!("{}\t", word);
@@ -244,20 +238,19 @@ mod tests {
                 .map(|s| s.to_string())
                 .collect::<Vec<String>>()
         };
-        let filter = |word: &str, result: &str| {
+        let make_filter = |word: &str, result: &str| {
             ResultFilter::new_owned(word.to_string(), result.to_string())
         };
 
-        let mut filters = Vec::new();
-
         let words = make_words(vec!["soare", "socko", "songs", "socks"]);
-        filters.push(filter("soare", "gg..."));
+        let filter = make_filter("soare", "gg...");
         let expected = vec!["socko", "songs", "socks"];
-        assert_eq!(expected, get_matching_words(&words, &filters));
+        assert_eq!(expected, get_matching_words(&words, &filter));
 
-        filters.push(filter("socko", "gg..."));
+        let words = make_words(vec!["socko", "songs", "socks"]);
+        let filter = make_filter("socko", "gg...");
         let expected = vec!["songs"];
-        assert_eq!(expected, get_matching_words(&words, &filters));
+        assert_eq!(expected, get_matching_words(&words, &filter));
     }
 
     #[test]
@@ -301,7 +294,6 @@ mod tests {
             .into_iter()
             .map(|s| s.to_string())
             .collect::<Vec<String>>();
-        let filters = &Vec::new();
-        b.iter(|| get_best_guess(&words, &filters));
+        b.iter(|| get_best_guess(&words));
     }
 }
