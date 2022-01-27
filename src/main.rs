@@ -19,6 +19,7 @@ fn main() -> Result<(), io::Error> {
         let (word, result) = guess.unwrap();
         if result == "ggggg" {
             println!("You won!");
+            break;
         }
         let filter = ResultFilter::new_owned(word, result);
         words = get_matching_words(&words, &filter)
@@ -27,7 +28,7 @@ fn main() -> Result<(), io::Error> {
             .collect();
         match words.len() {
             0 => {
-                println!("No words remaining. You... lose?");
+                println!("No words remaining. You... made typo?");
                 break;
             }
             1 => {
@@ -41,8 +42,11 @@ fn main() -> Result<(), io::Error> {
     Ok(())
 }
 
-fn get_matching_words<'a>(words: &'a Vec<String>, filter: &ResultFilter) -> Vec<&'a String> {
-    words.iter().filter(|w| filter.matches(w)).collect()
+fn get_matching_words<'a>(
+    words: &'a Vec<String>,
+    filter: &'a ResultFilter,
+) -> impl Iterator<Item = &'a String> + 'a {
+    words.iter().filter(|w| filter.matches(w))
 }
 
 fn get_best_guess<'a>(words: &'a Vec<String>) -> Vec<&'a String> {
@@ -51,7 +55,7 @@ fn get_best_guess<'a>(words: &'a Vec<String>) -> Vec<&'a String> {
         for word in words {
             let result = get_result(guess, word);
             let filter = ResultFilter::new_borrowed(guess, result);
-            let num_matches = get_matching_words(words, &filter).len();
+            let num_matches = get_matching_words(words, &filter).count();
             *guesses.entry(word).or_insert(0) += num_matches;
         }
     }
@@ -265,12 +269,18 @@ mod tests {
         let words = make_words(vec!["soare", "socko", "songs", "socks"]);
         let filter = make_filter("soare", "gg...");
         let expected = vec!["socko", "songs", "socks"];
-        assert_eq!(expected, get_matching_words(&words, &filter));
+        assert_eq!(
+            expected,
+            get_matching_words(&words, &filter).collect::<Vec<_>>()
+        );
 
         let words = make_words(vec!["socko", "songs", "socks"]);
         let filter = make_filter("socko", "gg...");
         let expected = vec!["songs"];
-        assert_eq!(expected, get_matching_words(&words, &filter));
+        assert_eq!(
+            expected,
+            get_matching_words(&words, &filter).collect::<Vec<_>>()
+        );
     }
 
     #[test]
