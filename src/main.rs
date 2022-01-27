@@ -1,5 +1,5 @@
-use std::fs::File;
 use std::collections::HashMap;
+use std::fs::File;
 use std::io::{self, BufRead};
 
 fn main() -> Result<(), io::Error> {
@@ -13,13 +13,16 @@ fn main() -> Result<(), io::Error> {
             continue;
         }
         filters.push(ResultFilter::new(guess.unwrap()));
-        words = words.into_iter().filter(|w| filters.iter().all(|f| f.matches(w))).collect();
+        words = words
+            .into_iter()
+            .filter(|w| filters.iter().all(|f| f.matches(w)))
+            .collect();
         if words.len() == 1 {
             println!("Last word remaining! {}", words[0]);
             break;
         }
     }
-    
+
     Ok(())
 }
 
@@ -49,15 +52,17 @@ impl ResultFilter {
                     if candidate.chars().nth(i).unwrap() != expected {
                         return false;
                     }
-                },
+                }
                 'y' => {
                     if candidate.chars().nth(i).unwrap() == expected {
                         return false;
                     }
-                    if candidate.chars().filter(|&c| c == expected).count() < *counts.get(&expected).unwrap() {
+                    if candidate.chars().filter(|&c| c == expected).count()
+                        < *counts.get(&expected).unwrap()
+                    {
                         return false;
                     }
-                },
+                }
                 _ => {
                     if candidate.chars().filter(|&c| c == expected).count() > 0 {
                         return false;
@@ -70,7 +75,7 @@ impl ResultFilter {
 }
 
 fn output_status(words: &Vec<String>) {
-    println!("There are {} possible words left", words.len()); 
+    println!("There are {} possible words left", words.len());
     let mut i = 0;
     for word in words {
         print!("{}\t", word);
@@ -83,27 +88,28 @@ fn output_status(words: &Vec<String>) {
 }
 
 fn get_guess(words: &Vec<String>) -> Result<Option<(String, String)>, io::Error> {
-    let guess = get_input("What was your guess? ", |s| {
-        words.contains(s)
-    })?;
+    let guess = get_input("What was your guess? ", |s| words.contains(s))?;
     if let None = guess {
         println!("Invalid guess");
         return Ok(None);
     }
 
-    let result = get_input("What was the result (format 'y..gg')? ", |s| {
-        s.len() == 5
-    })?;
+    let result = get_input("What was the result (format 'y..gg')? ", |s| s.len() == 5)?;
     if let None = result {
         println!("Invalid result");
         return Ok(None);
     }
 
-    Ok(Some((guess.unwrap().to_ascii_lowercase(), result.unwrap().to_ascii_lowercase())))
+    Ok(Some((
+        guess.unwrap().to_ascii_lowercase(),
+        result.unwrap().to_ascii_lowercase(),
+    )))
 }
 
-fn get_input<T>(prompt: &str, valid_predicate: T) -> Result<Option<String>, io::Error> 
-where T: Fn(&String) -> bool {
+fn get_input<T>(prompt: &str, valid_predicate: T) -> Result<Option<String>, io::Error>
+where
+    T: Fn(&String) -> bool,
+{
     println!("{}", prompt);
     let mut input = String::new();
     let _ = io::stdin().read_line(&mut input)?;
