@@ -17,10 +17,7 @@ fn main() -> Result<(), io::Error> {
             println!("You won!");
         }
         filters.push(ResultFilter { word, result });
-        words = words
-            .into_iter()
-            .filter(|w| filters.iter().all(|f| f.matches(w)))
-            .collect();
+        words = get_matching_words(&words, &filters);
         match words.len() {
             0 => {
                 println!("No words remaining. You... lose?");
@@ -37,6 +34,14 @@ fn main() -> Result<(), io::Error> {
     Ok(())
 }
 
+fn get_matching_words(words: &Vec<String>, filters: &Vec<ResultFilter>) -> Vec<String> {
+    words
+        .iter()
+        .filter(|w| filters.iter().all(|f| f.matches(w)))
+        .cloned()
+        .collect()
+}
+
 struct ResultFilter {
     word: String,
     result: String,
@@ -47,8 +52,8 @@ impl ResultFilter {
         if candidate == self.word {
             return self.result == "ggggg";
         }
+        let mut counts = HashMap::new();
         for (i, c) in self.result.chars().enumerate() {
-            let mut counts = HashMap::new();
             let expected = self.word.chars().nth(i).unwrap();
             *counts.entry(expected).or_insert(0) += 1;
             match c {
@@ -68,7 +73,12 @@ impl ResultFilter {
                     }
                 }
                 _ => {
-                    if candidate.chars().filter(|&c| c == expected).count() > 0 {
+                    if candidate.chars().nth(i).unwrap() == expected {
+                        return false;
+                    }
+                    if candidate.chars().filter(|&c| c == expected).count()
+                        > *counts.entry(expected).or_insert(0)
+                    {
                         return false;
                     }
                 }
@@ -110,6 +120,25 @@ fn get_guess(words: &Vec<String>) -> Result<Option<(String, String)>, io::Error>
     )))
 }
 
+fn get_result(guess: &str, word: &str) -> String {
+    let mut result = String::new();
+    let mut counts = HashMap::new();
+    for (i, c) in guess.chars().enumerate() {
+        let expected = guess.chars().nth(i).unwrap();
+        *counts.entry(expected).or_insert(0) += 1;
+
+        if c == word.chars().nth(i).unwrap() {
+            result.push('g');
+        } else if word.chars().filter(|&c| c == expected).count() >= *counts.get(&expected).unwrap()
+        {
+            result.push('y');
+        } else {
+            result.push('.');
+        }
+    }
+    result
+}
+
 fn get_input<T>(prompt: &str, valid_predicate: T) -> Result<Option<String>, io::Error>
 where
     T: Fn(&String) -> bool,
@@ -129,4 +158,72 @@ pub fn get_words() -> Result<Vec<String>, io::Error> {
     let file = File::open("words.txt")?;
     let lines = io::BufReader::new(file).lines();
     lines.collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_matches() {
+        let filter = ResultFilter {
+            word: "socko".to_string(),
+            result: "gg...".to_string(),
+        };
+        assert!(!filter.matches("socko"));
+        assert!(filter.matches("soare"));
+        assert!(filter.matches("songs"));
+    }
+
+    #[test]
+    fn test_get_matching_words() {
+        let make_words = |v: Vec<&str>| {
+            v.into_iter()
+                .map(|s| s.to_string())
+                .collect::<Vec<String>>()
+        };
+        let filter = |word: &str, result: &str| ResultFilter {
+            word: word.to_string(),
+            result: result.to_string(),
+        };
+
+        let mut filters = Vec::new();
+
+        let words = make_words(vec!["soare", "socko", "songs", "socks"]);
+        filters.push(filter("soare", "gg..."));
+        let expected = make_words(vec!["socko", "songs", "socks"]);
+        assert_eq!(expected, get_matching_words(&words, &filters));
+
+        filters.push(filter("socko", "gg..."));
+        let expected = make_words(vec!["songs"]);
+        assert_eq!(expected, get_matching_words(&words, &filters));
+    }
+
+    #[test]
+    fn test_get_result() {
+        let mut words = HashMap::new();
+        let mut cases = HashMap::new();
+        cases.insert("llama", "yy...");
+        cases.insert("lards", "y....");
+        cases.insert("chalk", "...gy");
+        cases.insert("knoll", "ggggg");
+        words.insert("knoll", cases);
+
+        let mut cases = HashMap::new();
+        cases.insert("soare", "gg...");
+        cases.insert("socko", "gg...");
+        words.insert("songs", cases);
+
+        for (word, cases) in words {
+            for (guess, result) in cases {
+                assert_eq!(
+                    get_result(guess, word),
+                    result,
+                    "guess: {} word: {}",
+                    guess,
+                    word
+                );
+            }
+        }
+    }
 }
