@@ -243,6 +243,12 @@ mod tests {
         assert!(!filter.matches("socko"));
         assert!(filter.matches("soare"));
         assert!(filter.matches("songs"));
+
+        let filter = ResultFilter::new_owned("blush".to_string(), "gy.y.".to_string());
+        assert!(filter.matches("balls"));
+
+        let filter = ResultFilter::new_owned("balls".to_string(), "g.y.y".to_string());
+        assert!(filter.matches("blush"));
     }
 
     #[test]
@@ -281,6 +287,14 @@ mod tests {
         cases.insert("soare", "gg...");
         cases.insert("socko", "gg...");
         words.insert("songs", cases);
+
+        let mut cases = HashMap::new();
+        cases.insert("balls", "g.y.y");
+        words.insert("blush", cases);
+
+        let mut cases = HashMap::new();
+        cases.insert("blush", "gy.y.");
+        words.insert("balls", cases);
 
         for (word, cases) in words {
             for (guess, result) in cases {
