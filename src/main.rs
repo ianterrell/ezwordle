@@ -17,9 +17,16 @@ fn main() -> Result<(), io::Error> {
             .into_iter()
             .filter(|w| filters.iter().all(|f| f.matches(w)))
             .collect();
-        if words.len() == 1 {
-            println!("Last word remaining! {}", words[0]);
-            break;
+        match words.len() {
+            0 => {
+                println!("No words remaining. You... lose?");
+                break;
+            }
+            1 => {
+                println!("You win! The word is {}", words[0]);
+                break;
+            }
+            _ => {}
         }
     }
 
