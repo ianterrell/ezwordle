@@ -1,6 +1,7 @@
 #![feature(test)]
 
 extern crate test;
+use rand::seq::SliceRandom;
 use std::cmp::min;
 use std::collections::HashMap;
 use std::fs::File;
@@ -107,14 +108,15 @@ impl<'a> ResultFilter<'a> {
         let mut counts = HashMap::new();
         for (i, c) in self.result.chars().enumerate() {
             let expected = word.chars().nth(i).unwrap();
-            *counts.entry(expected).or_insert(0) += 1;
             match c {
                 'g' => {
+                    *counts.entry(expected).or_insert(0) += 1;
                     if candidate.chars().nth(i).unwrap() != expected {
                         return false;
                     }
                 }
                 'y' => {
+                    *counts.entry(expected).or_insert(0) += 1;
                     if candidate.chars().nth(i).unwrap() == expected {
                         return false;
                     }
@@ -141,14 +143,26 @@ impl<'a> ResultFilter<'a> {
 }
 
 fn output_status(words: &Vec<String>) {
+    const MAX: usize = 500;
+    const NUM_SAMPLES: usize = 48;
+
     println!("\nThere are {} possible words left...", words.len());
-    if words.len() > 1000 {
-        println!("That's too many to brute force good guesses.");
+    if words.len() > MAX {
+        println!("That's too many to brute force good guesses... here are some random ones:");
+        let sample = words.choose_multiple(&mut rand::thread_rng(), NUM_SAMPLES);
+        let mut i = 0;
+        for word in sample {
+            print!("{}\t", word);
+            i += 1;
+            if i % 12 == 0 {
+                println!();
+            }
+        }
     } else {
         println!("Guesses that narrow it down the most are:");
         let words = get_best_guess(words);
         let mut i = 0;
-        for word in &words[0..min(words.len(), 48)] {
+        for word in &words[0..min(words.len(), NUM_SAMPLES)] {
             print!("{}\t", word);
             i += 1;
             if i % 12 == 0 {
