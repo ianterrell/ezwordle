@@ -109,34 +109,33 @@ impl<'a> ResultFilter<'a> {
         if candidate == word {
             return self.result == "ggggg";
         }
-        let mut counts = HashMap::new();
+        // let mut counts = HashMap::new();
         for (i, c) in self.result.chars().enumerate() {
-            let expected = word.chars().nth(i).unwrap();
+            let char = word.chars().nth(i).unwrap();
+            let at_least_count = word
+                .chars()
+                .zip(self.result.chars())
+                .filter(|(w, r)| *w == char && (*r == 'g' || *r == 'y'))
+                .count();
             match c {
                 'g' => {
-                    *counts.entry(expected).or_insert(0) += 1;
-                    if candidate.chars().nth(i).unwrap() != expected {
+                    if candidate.chars().nth(i).unwrap() != char {
                         return false;
                     }
                 }
                 'y' => {
-                    *counts.entry(expected).or_insert(0) += 1;
-                    if candidate.chars().nth(i).unwrap() == expected {
+                    if candidate.chars().nth(i).unwrap() == char {
                         return false;
                     }
-                    if candidate.chars().filter(|&c| c == expected).count()
-                        < *counts.get(&expected).unwrap()
-                    {
+                    if candidate.chars().filter(|&c| c == char).count() < at_least_count {
                         return false;
                     }
                 }
                 _ => {
-                    if candidate.chars().nth(i).unwrap() == expected {
+                    if candidate.chars().nth(i).unwrap() == char {
                         return false;
                     }
-                    if candidate.chars().filter(|&c| c == expected).count()
-                        > *counts.entry(expected).or_insert(0)
-                    {
+                    if candidate.chars().filter(|&c| c == char).count() > at_least_count {
                         return false;
                     }
                 }
@@ -198,21 +197,43 @@ fn get_guess(words: &Vec<String>) -> Result<Option<(String, String)>, io::Error>
 
 fn get_result(guess: &str, word: &str) -> String {
     let mut result = String::new();
-    let mut counts = HashMap::new();
+    let mut g_counts = HashMap::new();
+    let mut c_counts = HashMap::new();
+
     for (i, c) in guess.chars().enumerate() {
-        let expected = guess.chars().nth(i).unwrap();
-        *counts.entry(expected).or_insert(0) += 1;
+        let char = guess.chars().nth(i).unwrap();
 
         if c == word.chars().nth(i).unwrap() {
             result.push('g');
-        } else if word.chars().filter(|&c| c == expected).count() >= *counts.get(&expected).unwrap()
-        {
-            result.push('y');
+            *g_counts.entry(char).or_insert(0) += 1;
+        } else if word.chars().filter(|&c| c == char).count() > 0 {
+            result.push('?');
         } else {
             result.push('.');
         }
     }
-    result
+
+    let mut final_result = String::new();
+    for (i, c) in result.chars().enumerate() {
+        if c == '?' {
+            let guess_char = guess.chars().nth(i).unwrap();
+            let c_count = c_counts.entry(guess_char).or_insert(0);
+            let g_count = g_counts.entry(guess_char).or_insert(0);
+            let current_total = *c_count + *g_count;
+            let expected_count = word.chars().filter(|&c| c == guess_char).count();
+
+            if current_total < expected_count {
+                final_result.push('y');
+                *c_count += 1;
+            } else {
+                final_result.push('.');
+            }
+        } else {
+            final_result.push(c);
+        }
+    }
+
+    final_result
 }
 
 fn get_input<T>(prompt: &str, valid_predicate: T) -> Result<Option<String>, io::Error>
@@ -248,11 +269,34 @@ mod tests {
         assert!(filter.matches("soare"));
         assert!(filter.matches("songs"));
 
-        let filter = ResultFilter::new_owned("blush".to_string(), "gy.y.".to_string());
-        assert!(filter.matches("balls"));
+        let mut words = HashMap::new();
+        let mut cases = HashMap::new();
+        cases.insert("blush", "gy.y.");
+        words.insert("balls", cases);
 
-        let filter = ResultFilter::new_owned("balls".to_string(), "g.y.y".to_string());
-        assert!(filter.matches("blush"));
+        let mut cases = HashMap::new();
+        cases.insert("balls", "g.y.y");
+        words.insert("blush", cases);
+
+        let mut cases = HashMap::new();
+        cases.insert("soare", "..g.g");
+        cases.insert("plane", "..g.g");
+        cases.insert("adage", ".yg.g");
+        cases.insert("weave", ".ygyg");
+        words.insert("evade", cases);
+
+        for (word, cases) in words {
+            for (guess, result) in cases {
+                let filter = ResultFilter::new_owned(guess.to_string(), result.to_string());
+                assert!(
+                    filter.matches(word),
+                    "filter {} {} should match {}",
+                    guess,
+                    result,
+                    word
+                );
+            }
+        }
     }
 
     #[test]
@@ -305,6 +349,13 @@ mod tests {
         let mut cases = HashMap::new();
         cases.insert("blush", "gy.y.");
         words.insert("balls", cases);
+
+        let mut cases = HashMap::new();
+        cases.insert("soare", "..g.g");
+        cases.insert("plane", "..g.g");
+        cases.insert("adage", ".yg.g");
+        cases.insert("weave", ".ygyg");
+        words.insert("evade", cases);
 
         for (word, cases) in words {
             for (guess, result) in cases {
