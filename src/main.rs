@@ -12,7 +12,11 @@ fn main() -> Result<(), io::Error> {
         if let None = guess {
             continue;
         }
-        filters.push(ResultFilter::new(guess.unwrap()));
+        let (word, result) = guess.unwrap();
+        if result == "ggggg" {
+            println!("You won!");
+        }
+        filters.push(ResultFilter { word, result });
         words = words
             .into_iter()
             .filter(|w| filters.iter().all(|f| f.matches(w)))
@@ -39,13 +43,6 @@ struct ResultFilter {
 }
 
 impl ResultFilter {
-    fn new(input: (String, String)) -> ResultFilter {
-        ResultFilter {
-            word: input.0,
-            result: input.1,
-        }
-    }
-
     fn matches(&self, candidate: &str) -> bool {
         if candidate == self.word {
             return self.result == "ggggg";
@@ -95,15 +92,15 @@ fn output_status(words: &Vec<String>) {
 }
 
 fn get_guess(words: &Vec<String>) -> Result<Option<(String, String)>, io::Error> {
-    let guess = get_input("What was your guess? ", |s| words.contains(s))?;
+    let guess = get_input("What was your guess?", |s| words.contains(s))?;
     if let None = guess {
-        println!("Invalid guess");
+        println!("That's not in the word list!");
         return Ok(None);
     }
 
-    let result = get_input("What was the result (format 'y..gg')? ", |s| s.len() == 5)?;
+    let result = get_input("What was the result (format 'y..gg')?", |s| s.len() == 5)?;
     if let None = result {
-        println!("Invalid result");
+        println!("That doesn't match the format expected! 5 characters, g or y or anything else.");
         return Ok(None);
     }
 
