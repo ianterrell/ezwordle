@@ -1,3 +1,6 @@
+#![feature(test)]
+
+extern crate test;
 use std::cmp::min;
 use std::collections::HashMap;
 use std::fs::File;
@@ -17,8 +20,11 @@ fn main() -> Result<(), io::Error> {
         if result == "ggggg" {
             println!("You won!");
         }
-        filters.push(ResultFilter { word, result });
-        words = get_matching_words(&words, &filters);
+        filters.push(ResultFilter::new_owned(word, result));
+        words = get_matching_words(&words, &filters)
+            .into_iter()
+            .cloned()
+            .collect();
         match words.len() {
             0 => {
                 println!("No words remaining. You... lose?");
@@ -35,58 +41,78 @@ fn main() -> Result<(), io::Error> {
     Ok(())
 }
 
-fn get_matching_words(words: &Vec<String>, filters: &Vec<ResultFilter>) -> Vec<String> {
+fn get_matching_words<'a>(words: &'a Vec<String>, filters: &Vec<ResultFilter>) -> Vec<&'a String> {
     words
         .iter()
         .filter(|w| filters.iter().all(|f| f.matches(w)))
-        .cloned()
         .collect()
 }
 
-fn get_best_guess(words: &Vec<String>, filters: &Vec<ResultFilter>) -> Vec<String> {
+fn get_best_guess<'a>(words: &'a Vec<String>, filters: &Vec<ResultFilter>) -> Vec<&'a String> {
     let mut guesses = HashMap::new();
     let mut filters = filters.to_vec();
     for guess in words {
         for word in words {
             let result = get_result(guess, word);
-            filters.push(ResultFilter {
-                word: guess.clone(),
-                result,
-            });
+            filters.push(ResultFilter::new_borrowed(guess, result));
             let num_matches = get_matching_words(words, &filters).len();
             filters.pop();
             *guesses.entry(word).or_insert(0) += num_matches;
         }
     }
-    struct Guess {
-        word: String,
+    struct Guess<'a> {
+        word: &'a String,
         score: usize,
     }
     let mut guesses = guesses
         .iter()
         .map(|(word, score)| Guess {
-            word: (**word).clone(),
+            word: *word,
             score: *score,
         })
         .collect::<Vec<_>>();
     guesses.sort_by(|a, b| a.score.cmp(&b.score));
-    guesses.iter().map(|g| g.word.clone()).collect()
+    guesses.iter().map(|g| g.word).collect()
 }
 
 #[derive(Clone, Debug)]
-struct ResultFilter {
-    word: String,
+enum ResultWord<'a> {
+    Borrowed(&'a str),
+    Owned(String),
+}
+
+#[derive(Clone, Debug)]
+struct ResultFilter<'a> {
+    word: ResultWord<'a>,
     result: String,
 }
 
-impl ResultFilter {
+impl<'a> ResultFilter<'a> {
+    fn new_owned(word: String, result: String) -> ResultFilter<'a> {
+        ResultFilter {
+            word: ResultWord::Owned(word),
+            result: result,
+        }
+    }
+
+    fn new_borrowed(word: &'a str, result: String) -> ResultFilter<'a> {
+        ResultFilter {
+            word: ResultWord::Borrowed(word),
+            result: result,
+        }
+    }
+
     fn matches(&self, candidate: &str) -> bool {
-        if candidate == self.word {
+        let word = match self.word {
+            ResultWord::Borrowed(w) => w,
+            ResultWord::Owned(ref w) => w,
+        };
+        if candidate == word {
             return self.result == "ggggg";
         }
         let mut counts = HashMap::new();
         for (i, c) in self.result.chars().enumerate() {
-            let expected = self.word.chars().nth(i).unwrap();
+            let expected = word.chars().nth(i).unwrap();
             *counts.entry(expected).or_insert(0) += 1;
             match c {
                 'g' => {
@@ -201,13 +227,11 @@ pub fn get_words() -> Result<Vec<String>, io::Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use test::Bencher;
 
     #[test]
     fn test_matches() {
-        let filter = ResultFilter {
-            word: "socko".to_string(),
-            result: "gg...".to_string(),
-        };
+        let filter = ResultFilter::new_owned("socko".to_string(), "gg...".to_string());
         assert!(!filter.matches("socko"));
         assert!(filter.matches("soare"));
         assert!(filter.matches("songs"));
@@ -220,20 +244,19 @@ mod tests {
                 .map(|s| s.to_string())
                 .collect::<Vec<String>>()
         };
-        let filter = |word: &str, result: &str| ResultFilter {
-            word: word.to_string(),
-            result: result.to_string(),
+        let filter = |word: &str, result: &str| {
+            ResultFilter::new_owned(word.to_string(), result.to_string())
         };
 
         let mut filters = Vec::new();
 
         let words = make_words(vec!["soare", "socko", "songs", "socks"]);
         filters.push(filter("soare", "gg..."));
-        let expected = make_words(vec!["socko", "songs", "socks"]);
+        let expected = vec!["socko", "songs", "socks"];
         assert_eq!(expected, get_matching_words(&words, &filters));
 
         filters.push(filter("socko", "gg..."));
-        let expected = make_words(vec!["songs"]);
+        let expected = vec!["songs"];
         assert_eq!(expected, get_matching_words(&words, &filters));
     }
 
@@ -263,5 +286,22 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[bench]
+    fn bench_get_best_guess(b: &mut Bencher) {
+        let words = vec![
+            "roset", "rosed", "rotes", "roles", "rotor", "rones", "roosa", "noser", "rodes",
+            "robes", "eorls", "tolar", "motor", "rohes", "loser", "ropes", "doser", "roted",
+            "rotas", "rokes", "royst", "poser", "roues", "hoser", "ronts", "boyar", "douar",
+            "rotls", "tores", "rotan", "rores", "donor", "dorsa", "roves", "dolor", "rosti",
+            "roost", "romeo", "rosit", "yores", "rosin", "roist", "robed", "dowar", "rodeo",
+        ];
+        let words = words
+            .into_iter()
+            .map(|s| s.to_string())
+            .collect::<Vec<String>>();
+        let filters = &Vec::new();
+        b.iter(|| get_best_guess(&words, &filters));
     }
 }
