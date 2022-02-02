@@ -12,7 +12,7 @@ fn main() -> Result<(), io::Error> {
 
     loop {
         output_status(&words);
-        let guess = get_guess(&words)?;
+        let guess = get_guess()?;
         if let None = guess {
             continue;
         }
@@ -176,14 +176,14 @@ fn output_status(words: &Vec<String>) {
     println!("\n... go guess one!\n");
 }
 
-fn get_guess(words: &Vec<String>) -> Result<Option<(String, String)>, io::Error> {
-    let guess = get_input("What was your guess?", |s| words.contains(s))?;
+fn get_guess() -> Result<Option<(String, String)>, io::Error> {
+    let guess = get_input("What was your guess?")?;
     if let None = guess {
         println!("That's not in the word list!");
         return Ok(None);
     }
 
-    let result = get_input("What was the result (format 'y..gg')?", |s| s.len() == 5)?;
+    let result = get_input("What was the result (format 'y..gg')?")?;
     if let None = result {
         println!("That doesn't match the format expected! 5 characters, g or y or anything else.");
         return Ok(None);
@@ -236,15 +236,12 @@ fn get_result(guess: &str, word: &str) -> String {
     final_result
 }
 
-fn get_input<T>(prompt: &str, valid_predicate: T) -> Result<Option<String>, io::Error>
-where
-    T: Fn(&String) -> bool,
-{
+fn get_input(prompt: &str) -> Result<Option<String>, io::Error> {
     println!("{}", prompt);
     let mut input = String::new();
     let _ = io::stdin().read_line(&mut input)?;
     input = input.trim().to_string();
-    if valid_predicate(&input) {
+    if input.len() == 5 {
         Ok(Some(input))
     } else {
         Ok(None)
