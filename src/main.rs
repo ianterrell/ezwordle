@@ -3,7 +3,7 @@
 extern crate test;
 use rand::seq::SliceRandom;
 use std::cmp::min;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::io::{self, BufRead};
 
@@ -49,6 +49,22 @@ fn get_matching_words<'a>(
     words.iter().filter(|w| filter.matches(w))
 }
 
+type FrequencyMaps = (HashMap<usize, HashMap<char, usize>>, HashMap<char, usize>);
+fn get_letter_frequencies(words: &Vec<String>) -> FrequencyMaps {
+    let mut pos_freq = HashMap::new();
+    let mut letter_freq = HashMap::new();
+
+    for word in words {
+        for (i, c) in word.chars().enumerate() {
+            let map = pos_freq.entry(i).or_insert(HashMap::new());
+            *map.entry(c).or_insert(0) += 1;
+            *letter_freq.entry(c).or_insert(0) += 1;
+        }
+    }
+
+    (pos_freq, letter_freq)
+}
+
 fn get_best_guess<'a>(words: &'a Vec<String>) -> Vec<&'a String> {
     let mut guesses = HashMap::new();
     for guess in words {
@@ -71,6 +87,40 @@ fn get_best_guess<'a>(words: &'a Vec<String>) -> Vec<&'a String> {
         })
         .collect::<Vec<_>>();
     guesses.sort_by(|a, b| a.score.cmp(&b.score));
+    guesses.iter().map(|g| g.word).collect()
+}
+
+fn get_best_guess_by_frequency<'a>(words: &'a Vec<String>, position: bool) -> Vec<&'a String> {
+    let (pos_freq, letter_freq) = get_letter_frequencies(words);
+
+    let mut guesses = HashMap::new();
+    for word in words {
+        let mut pos_score = 0;
+        let mut letter_score = 0;
+        for (i, c) in word.chars().enumerate() {
+            pos_score += pos_freq
+                .get(&i)
+                .unwrap_or(&HashMap::new())
+                .get(&c)
+                .unwrap_or(&0);
+            letter_score += letter_freq.get(&c).unwrap_or(&0);
+        }
+        guesses.insert(word, (pos_score, letter_score));
+    }
+
+    struct Guess<'a> {
+        word: &'a String,
+        score: usize,
+    }
+
+    let mut guesses = guesses
+        .iter()
+        .map(|(word, score)| Guess {
+            word: *word,
+            score: if position { score.0 } else { score.1 },
+        })
+        .collect::<Vec<_>>();
+    guesses.sort_by(|a, b| b.score.cmp(&a.score));
     guesses.iter().map(|g| g.word).collect()
 }
 
@@ -149,30 +199,60 @@ fn output_status(words: &Vec<String>) {
     const MAX: usize = 500;
     const NUM_SAMPLES: usize = 48;
 
-    println!("\nThere are {} possible words left...", words.len());
-    if words.len() > MAX {
-        println!("That's too many to brute force good guesses... here are some random ones:");
-        let sample = words.choose_multiple(&mut rand::thread_rng(), NUM_SAMPLES);
+    fn print(words: &Vec<&String>) {
         let mut i = 0;
-        for word in sample {
-            print!("{}\t", word);
+        for word in &words[0..min(words.len(), NUM_SAMPLES)] {
+            print!("\t{}", word);
             i += 1;
             if i % 12 == 0 {
                 println!();
             }
         }
+        if i % 12 != 0 {
+            println!();
+        }
+    }
+
+    fn is_unique(word: &str) -> bool {
+        let mut seen = HashSet::new();
+        for c in word.chars() {
+            if seen.contains(&c) {
+                return false;
+            }
+            seen.insert(c);
+        }
+        true
+    }
+
+    println!("\nThere are {} possible words left...", words.len());
+    {
+        println!("Highest by letter frequency in position are:");
+        let words = get_best_guess_by_frequency(words, true);
+        print(&words);
+        println!("Without duplicates...");
+        let words = words.into_iter().filter(|w| is_unique(w)).collect();
+        print(&words);
+    }
+    {
+        println!("Highest by letter frequency absolutely are:");
+        let words = get_best_guess_by_frequency(words, false);
+        print(&words);
+        println!("Without duplicates...");
+        let words = words.into_iter().filter(|w| is_unique(w)).collect();
+        print(&words);
+    }
+    if words.len() > MAX {
+        println!("That's too many to brute force good guesses... here are some random ones:");
+        let sample = words
+            .choose_multiple(&mut rand::thread_rng(), NUM_SAMPLES)
+            .collect();
+        print(&sample);
     } else {
         println!("Guesses that narrow it down the most are:");
         let words = get_best_guess(words);
-        let mut i = 0;
-        for word in &words[0..min(words.len(), NUM_SAMPLES)] {
-            print!("{}\t", word);
-            i += 1;
-            if i % 12 == 0 {
-                println!();
-            }
-        }
+        print(&words);
     }
+
     println!("\n... go guess one!\n");
 }
 
