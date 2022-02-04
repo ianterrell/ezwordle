@@ -237,6 +237,17 @@ fn output_status(words: &Vec<String>, usage_frequency: &HashMap<String, usize>) 
 
     println!("\nThere are {} possible words left...", words.len());
     {
+        let (pos_freq, _) = get_letter_frequencies(&words);
+        println!("Most common letters by position are...");
+        for i in 0..5_usize {
+            let mut letters = pos_freq[&i].iter().collect::<Vec<_>>();
+            letters.sort_by(|a, b| b.1.cmp(&a.1));
+            let letters = letters.iter().map(|l| l.0.to_string()).collect::<Vec<_>>();
+            println!("\t{}: {}", i, letters.join(", "));
+        }
+    }
+
+    {
         println!("Highest by english language usage frequency are:");
         let mut words: Vec<_> = words.iter().collect();
         words.sort_by(|a, b| {
