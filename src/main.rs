@@ -9,9 +9,10 @@ use std::io::{self, BufRead};
 
 fn main() -> Result<(), io::Error> {
     let mut words = get_words()?;
+    let usage_frequency = get_word_frequencies()?;
 
     loop {
-        output_status(&words);
+        output_status(&words, &usage_frequency);
         let guess = get_guess()?;
         if let None = guess {
             continue;
@@ -90,7 +91,10 @@ fn get_best_guess<'a>(words: &'a Vec<String>) -> Vec<&'a String> {
     guesses.iter().map(|g| g.word).collect()
 }
 
-fn get_best_guess_by_frequency<'a>(words: &'a Vec<String>, position: bool) -> Vec<&'a String> {
+fn get_best_guess_by_letter_frequency<'a>(
+    words: &'a Vec<String>,
+    position: bool,
+) -> Vec<&'a String> {
     let (pos_freq, letter_freq) = get_letter_frequencies(words);
 
     let mut guesses = HashMap::new();
@@ -195,8 +199,8 @@ impl<'a> ResultFilter<'a> {
     }
 }
 
-fn output_status(words: &Vec<String>) {
-    const MAX: usize = 500;
+fn output_status(words: &Vec<String>, usage_frequency: &HashMap<String, usize>) {
+    const MAX: usize = 400;
     const NUM_SAMPLES: usize = 48;
 
     fn print(words: &Vec<&String>) {
@@ -224,21 +228,43 @@ fn output_status(words: &Vec<String>) {
         true
     }
 
+    let mut scored = HashMap::new();
+    let mut score = |words: &Vec<&String>, val: usize| {
+        for word in &words[0..min(words.len(), NUM_SAMPLES)] {
+            *scored.entry(word.to_string()).or_insert(0) += val;
+        }
+    };
+
     println!("\nThere are {} possible words left...", words.len());
     {
+        println!("Highest by english language usage frequency are:");
+        let mut words: Vec<_> = words.iter().collect();
+        words.sort_by(|a, b| {
+            let a_freq = usage_frequency.get(*a).unwrap_or(&0);
+            let b_freq = usage_frequency.get(*b).unwrap_or(&0);
+            b_freq.cmp(a_freq)
+        });
+        score(&words, 1);
+        print(&words);
+    }
+    {
         println!("Highest by letter frequency in position are:");
-        let words = get_best_guess_by_frequency(words, true);
+        let words = get_best_guess_by_letter_frequency(words, true);
+        score(&words, 1);
         print(&words);
         println!("Without duplicates...");
         let words = words.into_iter().filter(|w| is_unique(w)).collect();
+        score(&words, 1);
         print(&words);
     }
     {
         println!("Highest by letter frequency absolutely are:");
-        let words = get_best_guess_by_frequency(words, false);
+        let words = get_best_guess_by_letter_frequency(words, false);
+        score(&words, 1);
         print(&words);
         println!("Without duplicates...");
         let words = words.into_iter().filter(|w| is_unique(w)).collect();
+        score(&words, 1);
         print(&words);
     }
     if words.len() > MAX {
@@ -246,10 +272,27 @@ fn output_status(words: &Vec<String>) {
         let sample = words
             .choose_multiple(&mut rand::thread_rng(), NUM_SAMPLES)
             .collect();
+        score(&sample, 1);
         print(&sample);
     } else {
         println!("Guesses that narrow it down the most are:");
         let words = get_best_guess(words);
+        score(&words, 1);
+        print(&words);
+    }
+    {
+        println!("Highest by score:");
+        let mut words: Vec<_> = scored.keys().collect();
+        words.sort_by(|a, b| {
+            let a_score = scored.get(*a).unwrap_or(&0);
+            let b_score = scored.get(*b).unwrap_or(&0);
+            b_score.cmp(a_score)
+        });
+        // words.sort_by(|a, b| {
+        //     let a_freq = usage_frequency.get(*a).unwrap_or(&0);
+        //     let b_freq = usage_frequency.get(*b).unwrap_or(&0);
+        //     b_freq.cmp(a_freq)
+        // });
         print(&words);
     }
 
@@ -332,6 +375,20 @@ pub fn get_words() -> Result<Vec<String>, io::Error> {
     let file = File::open("words.txt")?;
     let lines = io::BufReader::new(file).lines();
     lines.collect()
+}
+
+pub fn get_word_frequencies() -> Result<HashMap<String, usize>, io::Error> {
+    let file = File::open("unigram_freq.csv")?;
+    let lines = io::BufReader::new(file).lines();
+    let mut frequencies = HashMap::new();
+    for line in lines {
+        let line = line?;
+        let (word, count) = line.split_once(",").unwrap();
+        if word.len() == 5 {
+            frequencies.insert(word.to_string(), count.parse::<usize>().unwrap());
+        }
+    }
+    Ok(frequencies)
 }
 
 #[cfg(test)]
